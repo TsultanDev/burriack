@@ -25,6 +25,8 @@ func _ready() -> void:
 	_bank["hurt"] = _tone(180.0, 70.0, 0.22, 0.35, true)
 	_bank["enemy_hit"] = _tone(520.0, 260.0, 0.06, 0.18, true)
 	_bank["enemy_die"] = _noise_burst(0.28, 0.35)
+	_bank["boss"] = _arp([130.81, 155.56, 196.0, 130.81], 0.22, 0.38)
+	_bank["boss_die"] = _noise_burst(0.65, 0.5)
 	_bank["win"] = _arp([523.25, 659.25, 783.99, 1046.5], 0.12, 0.35)
 	_bank["lose"] = _arp([392.0, 329.63, 261.63, 196.0], 0.16, 0.35)
 

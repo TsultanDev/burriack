@@ -10,6 +10,7 @@ var _sensitivity_value: Label
 var _volume_slider: HSlider
 var _volume_value: Label
 var _fullscreen_check: CheckBox
+var _low_graphics_check: CheckBox
 
 
 func _ready() -> void:
@@ -94,6 +95,22 @@ func _build() -> void:
 	_fullscreen_check.toggled.connect(_on_fullscreen_toggled)
 	fullscreen_row.add_child(_fullscreen_check)
 
+	_low_graphics_check = CheckBox.new()
+	_low_graphics_check.text = "LOW SPEC GRAPHICS"
+	_low_graphics_check.add_theme_font_size_override("font_size", 17)
+	_low_graphics_check.add_theme_color_override("font_color", Ui.INK)
+	_low_graphics_check.add_theme_color_override("font_hover_color", Color.WHITE)
+	_low_graphics_check.add_theme_color_override("font_pressed_color", Ui.CYAN)
+	_low_graphics_check.add_theme_color_override("font_focus_color", Color.WHITE)
+	_low_graphics_check.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_low_graphics_check.toggled.connect(_on_low_graphics_toggled)
+	fullscreen_row.add_child(_low_graphics_check)
+
+	var low_hint := Ui.label("LOW SPEC DISABLES SHADOWS, GLOW, FOG, AND RENDERS AT 70% RESOLUTION.", 11, Ui.DIM)
+	low_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	low_hint.custom_minimum_size = Vector2(480.0, 0.0)
+	content.add_child(low_hint)
+
 	_add_rule(content)
 
 	var buttons := HBoxContainer.new()
@@ -163,6 +180,11 @@ func _on_fullscreen_toggled(pressed: bool) -> void:
 	Settings.set_fullscreen(pressed)
 
 
+func _on_low_graphics_toggled(pressed: bool) -> void:
+	Sfx.play("ui")
+	Settings.set_low_graphics(pressed)
+
+
 func _on_reset_pressed() -> void:
 	Sfx.play("ui")
 	Settings.reset_defaults()
@@ -182,3 +204,4 @@ func _sync() -> void:
 	_volume_slider.set_value_no_signal(Settings.master_volume)
 	_volume_value.text = "%d%%" % roundi(Settings.master_volume * 100.0)
 	_fullscreen_check.set_pressed_no_signal(Settings.fullscreen)
+	_low_graphics_check.set_pressed_no_signal(Settings.low_graphics)

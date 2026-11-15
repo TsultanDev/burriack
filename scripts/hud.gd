@@ -37,10 +37,14 @@ var _crosshair: Control
 var _pause_overlay: Control
 var _pause_level_label: Label
 var _settings_panel: Control
+var _boss_box: VBoxContainer
+var _boss_name_label: Label
+var _boss_bar: ProgressBar
 
 var _level_name := ""
 var _end_won := false
 var _end_final := false
+var _end_boss := false
 
 
 func _ready() -> void:
@@ -57,6 +61,7 @@ func _ready() -> void:
 	_build_status_panel(root)
 	_build_health_panel(root)
 	_build_hint(root)
+	_build_boss_panel(root)
 	_build_toast(root)
 	_build_end_overlay(root)
 	_build_pause_overlay(root)
@@ -109,7 +114,7 @@ func _build_score_panel(root: Control) -> void:
 	var brand := _label("CRYSTAL RUSH", 14, CYAN)
 	box.add_child(brand)
 
-	_level_label = _label("LEVEL 1 / 3", 12, DIM)
+	_level_label = _label("LEVEL 1-1", 12, DIM)
 	box.add_child(_level_label)
 
 	_score_label = _label("SCORE  00000", 30, INK)
@@ -128,7 +133,7 @@ func _build_status_panel(root: Control) -> void:
 	box.add_theme_constant_override("separation", 0)
 	root.add_child(box)
 
-	_crystal_label = _label("SHARDS  0 / 12", 24, INK)
+	_crystal_label = _label("SHARDS  0 / 0", 24, INK)
 	_crystal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_crystal_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(_crystal_label)
@@ -177,6 +182,35 @@ func _build_hint(root: Control) -> void:
 	root.add_child(hint)
 
 
+func _build_boss_panel(root: Control) -> void:
+	_boss_box = VBoxContainer.new()
+	_boss_box.anchor_left = 0.5
+	_boss_box.anchor_right = 0.5
+	_boss_box.offset_left = -300.0
+	_boss_box.offset_right = 300.0
+	_boss_box.offset_top = 18.0
+	_boss_box.offset_bottom = 84.0
+	_boss_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	_boss_box.add_theme_constant_override("separation", 4)
+	_boss_box.visible = false
+	root.add_child(_boss_box)
+
+	_boss_name_label = _label("BOSS", 15, RED)
+	_boss_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_boss_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_boss_box.add_child(_boss_name_label)
+
+	_boss_bar = ProgressBar.new()
+	_boss_bar.custom_minimum_size = Vector2(520.0, 14.0)
+	_boss_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_boss_bar.max_value = 1.0
+	_boss_bar.value = 1.0
+	_boss_bar.show_percentage = false
+	_boss_bar.add_theme_stylebox_override("background", _box(Color(0.06, 0.02, 0.04, 0.92), Color(0.55, 0.16, 0.22, 0.8), 2))
+	_boss_bar.add_theme_stylebox_override("fill", _box(RED, Color(1.0, 0.7, 0.75, 1.0), 2))
+	_boss_box.add_child(_boss_bar)
+
+
 func _build_toast(root: Control) -> void:
 	_toast_box = VBoxContainer.new()
 	_toast_box.anchor_left = 0.5
@@ -194,7 +228,7 @@ func _build_toast(root: Control) -> void:
 	_toast_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_toast_box.add_child(_toast_title)
 
-	_toast_sub = _label("Collect all 12 shards.", 17, CYAN)
+	_toast_sub = _label("Collect every shard.", 17, CYAN)
 	_toast_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_toast_sub.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_toast_box.add_child(_toast_sub)
@@ -232,7 +266,7 @@ func _build_end_overlay(root: Control) -> void:
 	_end_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_child(_end_title)
 
-	_end_level_label = Ui.label("LEVEL 1 / 3", 14, DIM)
+	_end_level_label = Ui.label("LEVEL 1-1", 14, DIM)
 	_end_level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_end_level_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_child(_end_level_label)
@@ -361,9 +395,9 @@ func _on_end_secondary_pressed() -> void:
 	menu_requested.emit()
 
 
-func set_level(index: int, total: int, title: String) -> void:
+func set_level(label_text: String, title: String) -> void:
 	_level_name = title
-	_level_label.text = "LEVEL %d / %d  -  %s" % [index, total, title]
+	_level_label.text = "LEVEL %s  -  %s" % [label_text, title]
 
 
 func set_score(value: int) -> void:
@@ -438,11 +472,33 @@ func close_settings() -> void:
 		_settings_panel.close()
 
 
-func show_end(won: bool, seconds: float, score: int, kills: int, crystals: int, total: int, level_index: int, is_final: bool, campaign_total: int) -> void:
+func show_boss(title: String, maximum: int) -> void:
+	_boss_name_label.text = "BOSS  -  %s" % title
+	_boss_bar.max_value = float(maxi(1, maximum))
+	_boss_bar.value = float(maxi(1, maximum))
+	_boss_box.visible = true
+	_boss_box.modulate.a = 0.0
+	create_tween().tween_property(_boss_box, "modulate:a", 1.0, 0.35)
+
+
+func set_boss_health(current: int, maximum: int) -> void:
+	_boss_bar.max_value = float(maxi(1, maximum))
+	_boss_bar.value = float(clampi(current, 0, maximum))
+
+
+func hide_boss() -> void:
+	if _boss_box != null:
+		_boss_box.visible = false
+
+
+func show_end(won: bool, seconds: float, score: int, kills: int, crystals: int, total: int, level_index: int, is_final: bool, campaign_total: int, boss_cleared: bool = false) -> void:
 	_end_won = won
 	_end_final = is_final and won
+	_end_boss = boss_cleared and won
 	if won and _end_final:
 		_end_title.text = "CAMPAIGN COMPLETE"
+	elif won and _end_boss:
+		_end_title.text = "PAGE CLEARED"
 	elif won:
 		_end_title.text = "SECTOR CLEARED"
 	else:
@@ -451,7 +507,7 @@ func show_end(won: bool, seconds: float, score: int, kills: int, crystals: int, 
 	_end_title.add_theme_color_override("font_color", accent)
 	_style_button(_end_primary, accent)
 
-	_end_level_label.text = "LEVEL %d / %d  -  %s" % [level_index, GameState.TOTAL_LEVELS, _level_name]
+	_end_level_label.text = "LEVEL %s  -  %s" % [GameState.level_label(level_index), _level_name]
 	var minutes := floori(seconds / 60.0)
 	var time_text := "%d:%05.2f" % [minutes, fmod(seconds, 60.0)]
 	_end_body.text = "TIME        %s\nSCORE       %d\nSTALKERS    %d\nSHARDS      %d / %d\n\nCAMPAIGN TOTAL   %d" % [time_text, score, kills, crystals, total, campaign_total]
@@ -460,6 +516,8 @@ func show_end(won: bool, seconds: float, score: int, kills: int, crystals: int, 
 		_end_primary.text = "RETRY LEVEL"
 	elif _end_final:
 		_end_primary.text = "PLAY AGAIN"
+	elif _end_boss:
+		_end_primary.text = "NEXT PAGE"
 	else:
 		_end_primary.text = "NEXT LEVEL"
 	_end_secondary.text = "MAIN MENU"
@@ -468,6 +526,7 @@ func show_end(won: bool, seconds: float, score: int, kills: int, crystals: int, 
 	_settings_panel.close()
 	_toast_box.visible = false
 	_crosshair.visible = false
+	hide_boss()
 	_end_overlay.visible = true
 	_end_overlay.modulate.a = 0.0
 	var tween := create_tween()

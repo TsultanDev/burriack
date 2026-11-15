@@ -21,6 +21,8 @@ const MENU_SCENE := "res://scenes/main_menu.tscn"
 var level: Dictionary = {}
 var level_index := 1
 var player: Player
+var boss: Stalker
+var boss_alive := false
 var state := "playing"
 var paused := false
 var score := 0
@@ -33,6 +35,7 @@ var _arena_half := 26.0
 var _enemy_respawn := 4.5
 var _last_health := 100
 var _rng := RandomNumberGenerator.new()
+var _boss_data: Dictionary = {}
 var _floor_material: ShaderMaterial
 var _wall_material: StandardMaterial3D
 var _crate_material: StandardMaterial3D
@@ -51,9 +54,11 @@ func _ready() -> void:
 	level = LEVELS.get_level(level_index - 1)
 	_arena_half = float(level["arena_half"])
 	_enemy_respawn = float(level["respawn"])
+	_boss_data = level.get("boss", {})
+	boss_alive = not _boss_data.is_empty()
 	_shard_setup()
 
-	hud.set_level(level_index, LEVELS.count(), str(level["name"]))
+	hud.set_level(GameState.level_label(level_index), str(level["name"]))
 	hud.set_score(0)
 	hud.set_crystals(0, shard_total)
 	hud.set_health(100, 100)
@@ -62,6 +67,7 @@ func _ready() -> void:
 	hud.restart_requested.connect(_restart_level)
 	hud.next_level_requested.connect(_on_next_level_requested)
 	hud.menu_requested.connect(_go_to_menu)
+	Settings.changed.connect(_apply_graphics_quality)
 
 	_build_materials()
 	_apply_theme()
@@ -72,7 +78,10 @@ func _ready() -> void:
 		_spawn_crystal(point)
 	for i in int(level["enemy_count"]):
 		_spawn_stalker()
+	if boss_alive:
+		_spawn_boss()
 
+	_apply_graphics_quality()
 	hud.show_toast(str(level["name"]), str(level["brief"]), 4.0)
 
 
@@ -114,7 +123,7 @@ func _set_paused(value: bool) -> void:
 	if state != "playing" or paused == value:
 		return
 	paused = value
-	hud.show_pause(paused, "LEVEL %d / %d  -  %s" % [level_index, LEVELS.count(), str(level["name"])])
+	hud.show_pause(paused, "LEVEL %s  -  %s" % [GameState.level_label(level_index), str(level["name"])])
 	if paused:
 		if player != null:
 			player.set_active(false)
@@ -184,6 +193,18 @@ func _apply_theme() -> void:
 	sun.light_color = level["sun"]
 	rim_cyan.light_color = level["rim_a"]
 	rim_magenta.light_color = level["rim_b"]
+
+
+func _apply_graphics_quality() -> void:
+	var low := Settings.low_graphics
+	sun.shadow_enabled = not low
+	rim_cyan.visible = not low
+	rim_magenta.visible = not low
+	var environment := world_environment.environment
+	if environment != null:
+		environment.glow_enabled = not low
+		environment.fog_enabled = not low
+		environment.ssao_enabled = false
 
 
 func _standard(color: Color, metallic: float, roughness: float) -> StandardMaterial3D:
@@ -292,6 +313,27 @@ func _spawn_stalker() -> void:
 	_spawn_burst(stalker.global_position, Color(1.0, 0.2, 0.3), 0.25)
 
 
+func _spawn_boss() -> void:
+	if _boss_data.is_empty() or state != "playing":
+		return
+	boss = STALKER_SCENE.instantiate()
+	boss.max_health = int(_boss_data["health"])
+	boss.speed = float(_boss_data["speed"])
+	boss.touch_damage = int(_boss_data["damage"])
+	boss.is_boss = true
+	boss.boss_scale = float(_boss_data["scale"])
+	boss.boss_tint = level["accent"]
+	boss.position = level["boss_spawn"]
+	actors.add_child(boss)
+	boss.player = player
+	boss.destroyed.connect(_on_boss_destroyed)
+	boss.health_changed.connect(_on_boss_health_changed)
+	hud.show_boss(str(_boss_data["name"]), boss.max_health)
+	hud.set_boss_health(boss.health, boss.max_health)
+	_spawn_burst(boss.global_position, level["accent"], 0.8)
+	Sfx.play("boss", 0.7, -3.0)
+
+
 func _on_crystal_collected(crystal: Area3D, value: int) -> void:
 	if state != "playing":
 		return
@@ -302,7 +344,7 @@ func _on_crystal_collected(crystal: Area3D, value: int) -> void:
 	hud.ping_crystal()
 	_spawn_burst(crystal.global_position, Color(0.35, 1.0, 0.9), 0.3)
 	if shards_left <= 0:
-		_win()
+		_check_win()
 
 
 func _on_stalker_destroyed(at: Vector3) -> void:
@@ -312,7 +354,31 @@ func _on_stalker_destroyed(at: Vector3) -> void:
 	score += 75
 	hud.set_score(score)
 	_spawn_burst(at, Color(1.0, 0.25, 0.2), 0.35)
-	get_tree().create_timer(_enemy_respawn, false).timeout.connect(_respawn_stalker)
+	if _enemy_respawn > 0.0:
+		get_tree().create_timer(_enemy_respawn, false).timeout.connect(_respawn_stalker)
+
+
+func _on_boss_destroyed(at: Vector3) -> void:
+	if state != "playing":
+		return
+	boss_alive = false
+	kills += 1
+	score += int(_boss_data.get("score", 800))
+	hud.set_score(score)
+	hud.hide_boss()
+	_spawn_burst(at, level["accent"], 0.9)
+	_spawn_burst(at, Color(1.0, 0.85, 0.35), 0.6)
+	Sfx.play("boss_die", 0.8, -2.0)
+	_check_win()
+
+
+func _on_boss_health_changed(current: int, maximum: int) -> void:
+	hud.set_boss_health(current, maximum)
+
+
+func _check_win() -> void:
+	if state == "playing" and shards_left <= 0 and not boss_alive:
+		_win()
 
 
 func _respawn_stalker() -> void:
@@ -340,12 +406,14 @@ func _on_player_died() -> void:
 func _win() -> void:
 	state = "won"
 	GameState.add_score(score)
+	GameState.complete_level()
 	Sfx.play("win", 1.0, -4.0)
 	if player != null:
 		player.set_active(false)
 	await get_tree().create_timer(0.55).timeout
 	if is_inside_tree() and state == "won":
-		hud.show_end(true, elapsed, score, kills, shard_total, shard_total, level_index, GameState.is_final_level(), GameState.total_score)
+		hud.hide_boss()
+		hud.show_end(true, elapsed, score, kills, shard_total, shard_total, level_index, GameState.is_final_level(), GameState.total_score, GameState.is_boss_level(level_index))
 
 
 func _spawn_burst(at: Vector3, color: Color, size: float) -> void:

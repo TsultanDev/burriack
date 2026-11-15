@@ -10,19 +10,24 @@ Open the project in Godot 4.7+ and press **F5**, or run:
 godot --path .
 ```
 
-The game opens on the main menu. **PLAY CAMPAIGN** starts at level 1; **SETTINGS** adjusts mouse sensitivity, master volume, and fullscreen; **EXIT** quits.
+The game opens on the main menu. **PLAY CAMPAIGN** opens the level-select map; **SETTINGS** adjusts mouse sensitivity, master volume, fullscreen, and low-spec graphics; **EXIT** quits.
 
-## Play
+## Campaign
 
-Clear three sectors, each with a different arena, shard count, and number of stalkers:
+The campaign has two pages of ten levels. Level buttons use the `page-slot` format (`1-1` through `2-10`), and the last level of each page is a boss.
 
-| Level | Sector | Shards | Stalkers |
+| Page | Levels | Theme | Boss |
 | --- | --- | --- | --- |
-| 1 | First Contact | 8 | 3 |
-| 2 | Crossfire | 10 | 5 |
-| 3 | The Gauntlet | 12 | 7 |
+| 1 | 1-1 … 1-9 | Cyan / magenta neon sectors | 1-10 — **The Overseer** |
+| 2 | 2-1 … 2-9 | Hot orange / red neon sectors | 2-10 — **The Architect** |
 
-Stalkers respawn a few seconds after they are destroyed, and later sectors make them tougher, faster, and more damaging. Win a sector to advance; clear the third to complete the campaign.
+Every level has a generated arena layout, its own colour theme, and escalating stalker stats. Boss levels use a dedicated boss with a large body, a health bar at the top of the screen, and an enrage speed boost below half health. To clear a boss level, collect every shard **and** destroy the boss; boss-level minions do not respawn.
+
+Winning a level unlocks the next one and saves progress to `user://campaign.cfg`. Clearing **The Overseer** unlocks page 2. Clearing **The Architect** completes the campaign.
+
+Stalkers respawn a few seconds after they are destroyed on normal levels. Later levels make them tougher, faster, and more damaging.
+
+## Controls
 
 | Input | Action |
 | --- | --- |
@@ -31,12 +36,16 @@ Stalkers respawn a few seconds after they are destroyed, and later sectors make 
 | `Space` | Jump |
 | Mouse | Look |
 | Left click | Fire |
-| `Esc` | Pause / close settings |
+| `Esc` | Pause / close settings / close level select |
 | `R` / `Enter` | Restart level |
 
-The pause menu offers **Resume**, **Restart Level**, **Settings**, and **Main Menu**. End screens offer the next level, a retry, or a return to the menu when the campaign is finished.
+The pause menu offers **Resume**, **Restart Level**, **Settings**, and **Main Menu**. End screens offer the next level, the next page after a boss, a retry, or a return to the menu when the campaign is finished.
+
+## Settings
 
 Settings are saved to `user://settings.cfg` and applied immediately. Mouse sensitivity is a multiplier on top of the base look speed.
+
+**LOW SPEC GRAPHICS** is intended for weaker devices. It disables shadows, glow, fog, and the coloured rim lights, turns off MSAA, and renders the 3D view at 70% resolution.
 
 ## Project layout
 
@@ -44,23 +53,24 @@ Settings are saved to `user://settings.cfg` and applied immediately. Mouse sensi
 - `scenes/main.tscn` — environment, lighting, and level root
 - `scenes/player.tscn` — third-person controller with spring-arm camera
 - `scenes/crystal.tscn` — collectible shard
-- `scenes/enemy.tscn` — hovering stalker
-- `scripts/main.gd` — procedural arena builder and level loop
-- `scripts/level_data.gd` — the three campaign layouts and enemy stats
-- `scripts/hud.gd` — code-built HUD, pause menu, settings, and end screens
+- `scenes/enemy.tscn` — hovering stalker, reused for bosses
+- `scripts/main.gd` — procedural arena builder, boss fight, and level loop
+- `scripts/level_data.gd` — deterministic layouts, palettes, and stats for all 20 levels
+- `scripts/level_select.gd` — two-page level-select map with locking and progress
+- `scripts/hud.gd` — code-built HUD, boss bar, pause menu, settings, and end screens
 - `scripts/main_menu.gd` — menu backdrop and navigation
 - `scripts/settings_panel.gd` — reusable settings overlay
-- `scripts/settings_manager.gd` — persisted player settings (autoload)
-- `scripts/game_state.gd` — campaign level and score state (autoload)
+- `scripts/settings_manager.gd` — persisted player settings and graphics quality (autoload)
+- `scripts/game_state.gd` — campaign progress, page/level labels, and score state (autoload)
 - `scripts/sfx.gd` — synthesized sound bank (autoload)
 - `shaders/floor_grid.gdshader` — anti-aliased neon floor grid
 
 ## Tests
 
-A headless integration test checks the menu, settings, all three level layouts, movement, shooting, damage, pausing, pickups, and the win/lose/navigation flow:
+A headless integration test checks the menu, settings, low-spec graphics, the two-page level select, movement, shooting, damage, pausing, pickups, boss fights, win/lose flow, and campaign progression:
 
 ```sh
 godot --headless --path . --script res://tests/game_test.gd
 ```
 
-`tests/screenshot.gd` renders the menu and level 1 to `tests/shot_menu.png` and `tests/shot_main.png` when a display is available.
+`tests/screenshot.gd` renders the menu, level select, and level 1 to `tests/shot_menu.png`, `tests/shot_select.png`, and `tests/shot_main.png` when a display is available.

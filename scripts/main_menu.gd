@@ -4,15 +4,21 @@ extends Node3D
 const CRYSTAL_SCENE := preload("res://scenes/crystal.tscn")
 const Ui := preload("res://scripts/ui_theme.gd")
 const SettingsPanelScript := preload("res://scripts/settings_panel.gd")
+const LevelSelectScript := preload("res://scripts/level_select.gd")
 const GAME_SCENE := "res://scenes/main.tscn"
 
 @onready var camera: Camera3D = $Camera3D
 @onready var backdrop: Node3D = $Backdrop
+@onready var world_environment: WorldEnvironment = $WorldEnvironment
+@onready var sun: DirectionalLight3D = $Sun
+@onready var rim_cyan: OmniLight3D = $RimCyan
+@onready var rim_magenta: OmniLight3D = $RimMagenta
 
 var _time := 0.0
 var _starting := false
 var _fade: ColorRect
 var _settings_panel: Control
+var _level_select: Control
 var _torus: MeshInstance3D
 var _buttons: Array[Button] = []
 
@@ -22,6 +28,8 @@ func _ready() -> void:
 	get_tree().paused = false
 	_build_backdrop()
 	_build_ui()
+	Settings.changed.connect(_apply_graphics_quality)
+	_apply_graphics_quality()
 
 
 func _process(delta: float) -> void:
@@ -35,9 +43,26 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel") and _settings_panel != null and _settings_panel.visible:
+	if not event.is_action_pressed("ui_cancel"):
+		return
+	if _settings_panel != null and _settings_panel.visible:
 		_settings_panel.close()
 		get_viewport().set_input_as_handled()
+	elif _level_select != null and _level_select.visible:
+		_level_select.close()
+		get_viewport().set_input_as_handled()
+
+
+func _apply_graphics_quality() -> void:
+	var low := Settings.low_graphics
+	sun.shadow_enabled = not low
+	rim_cyan.visible = not low
+	rim_magenta.visible = not low
+	var environment := world_environment.environment
+	if environment != null:
+		environment.glow_enabled = not low
+		environment.fog_enabled = not low
+		environment.ssao_enabled = false
 
 
 func _build_backdrop() -> void:
@@ -148,7 +173,7 @@ func _build_ui() -> void:
 	rule.custom_minimum_size = Vector2(0.0, 2.0)
 	box.add_child(rule)
 
-	var description := Ui.label("THREE SECTORS. ONE RUN.\nCollect every shard. Shoot the stalkers. Stay alive.", 17, Ui.DIM)
+	var description := Ui.label("TWO PAGES. TWENTY LEVELS. TWO BOSSES.\nCollect every shard. Shoot the stalkers. Stay alive.", 17, Ui.DIM)
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	description.custom_minimum_size = Vector2(0.0, 58.0)
 	box.add_child(description)
@@ -187,16 +212,27 @@ func _build_ui() -> void:
 	root.add_child(_fade)
 	create_tween().tween_property(_fade, "color:a", 0.0, 0.65)
 
+	_level_select = LevelSelectScript.new()
+	_level_select.level_chosen.connect(_on_level_chosen)
+	root.add_child(_level_select)
+
 	_settings_panel = SettingsPanelScript.new()
 	root.add_child(_settings_panel)
 
 
 func _on_play_pressed() -> void:
+	Sfx.play("ui")
+	_settings_panel.close()
+	_level_select.open()
+
+
+func _on_level_chosen(index: int) -> void:
 	if _starting:
 		return
 	_starting = true
 	Sfx.play("ui")
-	GameState.start_campaign()
+	_level_select.close()
+	GameState.select_level(index)
 	for button in _buttons:
 		button.disabled = true
 	var tween := create_tween()
@@ -210,6 +246,8 @@ func _begin_game() -> void:
 
 func _on_settings_pressed() -> void:
 	Sfx.play("ui")
+	if _level_select != null:
+		_level_select.close()
 	_settings_panel.open()
 
 

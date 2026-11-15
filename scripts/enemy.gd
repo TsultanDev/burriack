@@ -3,11 +3,15 @@ extends CharacterBody3D
 ## Hovering hunter. Chases the player and deals contact damage.
 
 signal destroyed(at: Vector3)
+signal health_changed(current: int, maximum: int)
 
 @export var speed := 3.3
 @export var max_health := 2
 @export var touch_damage := 18
 @export var touch_range := 1.3
+@export var is_boss := false
+@export var boss_scale := 1.8
+@export var boss_tint := Color(1.0, 0.2, 0.32)
 
 var player: Player
 var health := 2
@@ -19,11 +23,14 @@ var _flash := 0.0
 var _hit_stun := 0.0
 var _knockback := Vector3.ZERO
 var _eye_mat: StandardMaterial3D
+var _ring_mat: StandardMaterial3D
+var _base_speed := 3.3
 
 @onready var visual: Node3D = $Visual
 @onready var eye: MeshInstance3D = $Visual/Eye
 @onready var ring: MeshInstance3D = $Visual/Ring
 @onready var light: OmniLight3D = $Visual/Light
+@onready var collision: CollisionShape3D = $Collision
 
 
 func _ready() -> void:
@@ -31,11 +38,36 @@ func _ready() -> void:
 	health = max_health
 	_time = randf() * TAU
 	speed *= randf_range(0.9, 1.12)
+	_base_speed = speed
 
 	var source := eye.mesh.surface_get_material(0)
 	if source is StandardMaterial3D:
 		_eye_mat = source.duplicate()
 		eye.material_override = _eye_mat
+
+	var ring_source := ring.mesh.surface_get_material(0)
+	if ring_source is StandardMaterial3D:
+		_ring_mat = ring_source.duplicate()
+		ring.material_override = _ring_mat
+
+	if is_boss:
+		visual.scale = Vector3.ONE * boss_scale
+		touch_range *= boss_scale
+		if collision.shape is SphereShape3D:
+			var sphere := collision.shape.duplicate() as SphereShape3D
+			sphere.radius *= boss_scale
+			collision.shape = sphere
+		if _eye_mat != null:
+			_eye_mat.albedo_color = boss_tint
+			_eye_mat.emission = boss_tint
+		if _ring_mat != null:
+			_ring_mat.albedo_color = boss_tint.lerp(Color(1.0, 0.85, 0.25), 0.5)
+			_ring_mat.emission = boss_tint.lerp(Color(1.0, 0.6, 0.1), 0.6)
+		light.light_color = boss_tint
+		light.light_energy = 2.0
+		light.omni_range = 7.0
+
+	health_changed.emit(health, max_health)
 
 
 func _physics_process(delta: float) -> void:
@@ -44,6 +76,9 @@ func _physics_process(delta: float) -> void:
 	_time += delta
 	_touch_cd = maxf(0.0, _touch_cd - delta)
 	_hit_stun = maxf(0.0, _hit_stun - delta)
+
+	var enraged := is_boss and health <= max_health / 2.0
+	var current_speed := _base_speed * (1.28 if enraged else 1.0)
 
 	var to := Vector3.ZERO
 	var distance := 999.0
@@ -58,7 +93,7 @@ func _physics_process(delta: float) -> void:
 
 	var wish := Vector3.ZERO
 	if has_target and _hit_stun <= 0.0 and distance > 0.9:
-		wish = dir * speed
+		wish = dir * current_speed
 
 	for other in get_tree().get_nodes_in_group("enemies"):
 		if other == self or not is_instance_valid(other):
@@ -91,18 +126,26 @@ func _physics_process(delta: float) -> void:
 	if _eye_mat != null:
 		_eye_mat.emission_energy_multiplier = 4.0 + sin(_time * 6.0) * 1.5 + _flash * 12.0
 	light.light_energy = 1.0 + sin(_time * 5.0) * 0.25 + _flash * 3.0
+	if is_boss:
+		var pulse := 1.0 + sin(_time * 4.2) * 0.08
+		ring.rotation.y += delta * 3.2
+		ring.rotation.x = 0.32 + sin(_time * 2.1) * 0.2
+		if _ring_mat != null:
+			_ring_mat.emission_energy_multiplier = (2.6 if health > max_health / 2.0 else 5.0) + _flash * 6.0
+		light.light_energy += pulse + (1.0 if health <= max_health / 2.0 else 0.0)
 
 
 func take_hit(amount: int, hit_position: Vector3) -> void:
 	if not active:
 		return
 	health -= amount
+	health_changed.emit(maxi(health, 0), max_health)
 	_flash = 1.0
-	_hit_stun = 0.14
+	_hit_stun = 0.09 if is_boss else 0.14
 	var push := global_position - hit_position
 	push.y = 0.0
 	if push.length_squared() > 0.01:
-		_knockback = push.normalized() * 3.5
+		_knockback = push.normalized() * (1.1 if is_boss else 3.5)
 	Sfx.play("enemy_hit", randf_range(0.9, 1.1), -8.0)
 	if health <= 0:
 		_die()
@@ -118,7 +161,8 @@ func _die() -> void:
 
 	var tween := create_tween()
 	tween.set_parallel(true)
-	tween.tween_property(visual, "scale", Vector3.ONE * 2.0, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	var end_scale := visual.scale * (2.4 if is_boss else 2.0)
+	tween.tween_property(visual, "scale", end_scale, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 	tween.tween_property(light, "light_energy", 9.0, 0.22)
-	tween.tween_property(light, "omni_range", 13.0, 0.22)
+	tween.tween_property(light, "omni_range", 13.0 if not is_boss else 20.0, 0.22)
 	tween.chain().tween_callback(queue_free)
