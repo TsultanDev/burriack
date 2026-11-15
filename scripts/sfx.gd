@@ -18,6 +18,8 @@ func _ready() -> void:
 		_voices.append(voice)
 
 	_bank["shoot"] = _tone(1200.0, 320.0, 0.075, 0.22, true)
+	_bank["ui"] = _tone(680.0, 940.0, 0.045, 0.13)
+	_bank["ui_back"] = _tone(520.0, 340.0, 0.05, 0.13)
 	_bank["jump"] = _tone(260.0, 620.0, 0.09, 0.16)
 	_bank["pickup"] = _arp([740.0, 1110.0, 1480.0], 0.05, 0.30)
 	_bank["hurt"] = _tone(180.0, 70.0, 0.22, 0.35, true)
